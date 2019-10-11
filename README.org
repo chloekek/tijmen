@@ -1,0 +1,105 @@
+#+TITLE: Tijmen
+
+Time library in which the various concepts are properly separated and
+well-defined.
+
+** Technicalities
+
+The library is written as a data structure in Perl. These data structures are
+automatically converted to data type and subroutine definitions in various
+programming languages.
+
+** Major concepts
+
+The library is divided into two major concepts: the timeline and the
+Terran day–night cycle. Each concept is implemented in its own module,
+which may consist of multiple submodules.
+
+*** Timeline
+
+The timeline is a one-dimensional space. Each point in this space is
+called an /instant/. The distance between two instants in this space
+is called a /duration/.
+
+Everybody with a properly calibrated clock agrees on the timeline. It
+is not important where they are in the universe.
+
+Functions that operate on instants and durations are not concerned
+with days, months, times of day, time zones, leap seconds, or similar
+concepts. The only useful operations are those involving arithmetic on
+durations and instants.
+
+**** TODO Document the group theoretic aspects of durations and instants.
+
+*** Terran day–night cycle
+
+The Terran day–night cycle has great influence on biological
+processes, and by extension on business rules.
+
+Working with the Terran day–night cycle is very complicated. The
+day–night cycle itself is influenced by unpredictable astrophysical
+effects, and the representations used by humans for describing
+information pertaining the day–night cycle have a history of
+inaccuracy, mistakes, adjustments, political decisions, and other
+disasters.
+
+The Terran day–night cycle is dealt with using the following concepts,
+each described briefly here:
+
+**** Gregorian local date
+
+Quadruplet of (era, year, month, day).
+
+***** TODO Say some more about this.
+
+**** Time of day
+
+Triplet of (hour, minute, second).
+
+***** TODO Say some more about this.
+
+**** Gregorian local datetime
+
+Pair of (Gregorian local date, local time of day).
+
+***** TODO Say some more about this.
+
+**** Gregorian global date
+
+Pair of (Gregorian local date, time zone).
+
+***** TODO Say some more about this.
+
+**** Gregorian global datetime
+
+Pair of (Gregorian global date, local time of day).
+
+***** TODO Say some more about this.
+
+**** TODO Time zone
+
+**** TODO DST
+
+*** Converting between the timeline and the Terran day–night cycle
+
+Converting between instants and datetimes is possible, but three
+parameters must be supplied: a time zone, a daylight saving time
+disambiguation, and a leap second table.
+
+To avoid the default blindness syndrome, there are no defaults for
+these parameters. They must be supplied explicitly to every operatione
+that does such conversions. The programmer is free to write their own
+wrappers that supply values suitable for their domain.
+
+** Relativity
+
+The library ignores relativity. An absolute, universal timeline is
+assumed.  This simplifies the implementation and is sufficient for
+nearly all business applications.
+
+** Forbidden terms
+
+Terms in the list of forbidden terms are not to be used anywhere in
+identifiers or documentation, because they are ill-defined. Use of
+derived terms, such as “time of day”, is allowed. The list of
+forbidden terms is: time, timestamp.
