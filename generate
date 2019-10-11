@@ -4,6 +4,48 @@ use v5.10;
 use strict;
 use warnings;
 
+sub compile_python_3
+{
+    my %expression = $_[0]->%*;
+    my $kind = $expression{kind};
+
+    if ($kind eq 'add') {
+        my $left  = compile_python_3($expression{left});
+        my $right = compile_python_3($expression{right});
+        return "($left + $right)";
+    }
+
+    if ($kind eq 'field') {
+        my $object = compile_python_3($expression{object});
+        my $field  = $expression{field};
+        return "$object._$field";
+    }
+
+    if ($kind eq 'new') {
+        my $type = $expression{type};
+        my $arguments = join(', ', map(compile_python_3($_),
+                                       $expression{arguments}->@*));
+        return "$type($arguments)";
+    }
+
+    if ($kind eq 'self') {
+        return 'self';
+    }
+
+    if ($kind eq 'subtract') {
+        my $left  = compile_python_3($expression{left});
+        my $right = compile_python_3($expression{right});
+        return "($left - $right)";
+    }
+
+    if ($kind eq 'variable') {
+        my $name = $expression{name};
+        return $name;
+    }
+
+    die("Unknown expression kind: $kind");
+}
+
 sub generate_python_3
 {
     my @structs = $_[0]->@*;
@@ -15,7 +57,7 @@ sub generate_python_3
     for my $struct (@structs) {
         my @fields = $struct->{fields}->@*;
         my @methods = $struct->{methods}->@*;
-        my $slots = join(', ', map("\"__$_->{name}\"", @fields));
+        my $slots = join(', ', map("\"_$_->{name}\"", @fields));
         my $init_parameters =
             join(', ', 'self', map("$_->{name}: $_->{type}", @fields));
 
@@ -27,7 +69,7 @@ sub generate_python_3
         say("    def __init__($init_parameters) -> None:");
         # TODO: Assert invariants.
         for my $field (@fields) {
-            say("        self.__$field->{name} = $field->{name}");
+            say("        self._$field->{name} = $field->{name}");
         }
 
         # Equality function definition.
@@ -35,7 +77,7 @@ sub generate_python_3
         say("        if not isinstance(other, $struct->{name}):");
         say("            return False");
         for my $field (@fields) {
-            say("        if not (self.__$field->{name} == other.__$field->{name}):");
+            say("        if not (self._$field->{name} == other._$field->{name}):");
             say("            return False");
         }
         say("        return True");
@@ -44,7 +86,7 @@ sub generate_python_3
         say("    def __hash__(self) -> bool:");
         say("        h = 0");
         for my $field (@fields) {
-            say("        h ^= hash(self.__$field->{name})");
+            say("        h ^= hash(self._$field->{name})");
         }
         say("        return h");
 
@@ -53,10 +95,53 @@ sub generate_python_3
             my @parameters = $method->{parameters}->@*;
             my $method_parameters =
                 join(', ', 'self', map("$_->{name}: $_->{type}", @parameters));
+            my $computation = compile_python_3($method->{computation});
             say("    def $method->{name}($method_parameters) -> $method->{return_type}:");
-            say("        pass");
+            say("        return $computation");
         }
     }
+}
+
+sub compile_rust
+{
+    my %expression = $_[0]->%*;
+    my $kind = $expression{kind};
+
+    if ($kind eq 'add') {
+        my $left  = compile_rust($expression{left});
+        my $right = compile_rust($expression{right});
+        return "($left + $right)";
+    }
+
+    if ($kind eq 'field') {
+        my $object = compile_rust($expression{object});
+        my $field  = $expression{field};
+        return "$object.$field";
+    }
+
+    if ($kind eq 'new') {
+        my $type = $expression{type};
+        my $arguments = join(', ', map(compile_rust($_),
+                                       $expression{arguments}->@*));
+        return "${type}::new($arguments)";
+    }
+
+    if ($kind eq 'self') {
+        return 'self';
+    }
+
+    if ($kind eq 'subtract') {
+        my $left  = compile_rust($expression{left});
+        my $right = compile_rust($expression{right});
+        return "($left - $right)";
+    }
+
+    if ($kind eq 'variable') {
+        my $name = $expression{name};
+        return $name;
+    }
+
+    die("Unknown expression kind: $kind");
 }
 
 sub generate_rust
@@ -98,7 +183,9 @@ sub generate_rust
             my @parameters = $method->{parameters}->@*;
             my $method_parameters =
                 join(', ', 'self', map("$_->{name}: $_->{type}", @parameters));
+            my $computation = compile_rust($method->{computation});
             say("    pub fn $method->{name}($method_parameters) -> $method->{return_type} {");
+            say("        $computation");
             say("    }");
         }
         say("}");
@@ -107,6 +194,13 @@ sub generate_rust
 
 my @structs;
 my @routines;
+
+sub e_add { {kind => 'add', left => $_[0], right => $_[1]} }
+sub e_fld { {kind => 'field', object => $_[0], field => $_[1]} }
+sub e_new { {kind => 'new', type => shift, arguments => [@_]} }
+sub e_slf { {kind => 'self'} }
+sub e_sub { {kind => 'subtract', left => $_[0], right => $_[1]} }
+sub e_var { {kind => 'variable', name => $_[0]} }
 
 push(@structs, {
     name => 'Instant',
@@ -120,6 +214,11 @@ push(@structs, {
                 {name => 'other', type => 'Duration'},
             ],
             return_type => 'Instant',
+            computation => do {
+                my $self_ns  = e_fld(e_slf, 'ns_since_epoch');
+                my $other_ns = e_fld(e_var('other'), 'ns');
+                e_new('Instant', e_add($self_ns, $other_ns));
+            },
         },
         {
             name => 'subtract_instant',
@@ -127,6 +226,11 @@ push(@structs, {
                 {name => 'other', type => 'Instant'},
             ],
             return_type => 'Duration',
+            computation => do {
+                my $self_ns  = e_fld(e_slf, 'ns_since_epoch');
+                my $other_ns = e_fld(e_var('other'), 'ns_since_epoch');
+                e_new('Duration', e_sub($self_ns, $other_ns));
+            },
         },
     ],
 });
@@ -143,6 +247,11 @@ push(@structs, {
                 {name => 'other', type => 'Duration'},
             ],
             return_type => 'Duration',
+            computation => do {
+                my $self_ns  = e_fld(e_slf, 'ns');
+                my $other_ns = e_fld(e_var('other'), 'ns');
+                e_new('Duration', e_add($self_ns, $other_ns));
+            },
         },
         {
             name => 'subtract_duration',
@@ -150,6 +259,11 @@ push(@structs, {
                 {name => 'other', type => 'Duration'},
             ],
             return_type => 'Duration',
+            computation => do {
+                my $self_ns  = e_fld(e_slf, 'ns');
+                my $other_ns = e_fld(e_var('other'), 'ns');
+                e_new('Duration', e_sub($self_ns, $other_ns));
+            },
         },
     ],
 });
