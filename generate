@@ -1,0 +1,156 @@
+#!/usr/bin/env perl
+
+use v5.10;
+use strict;
+use warnings;
+
+sub generate_python_3
+{
+    my @structs = $_[0]->@*;
+    my @routines = $_[1]->@*;
+
+    say('# Generated Python 3 version of Tijmen.');
+    say('from __future__ import annotations');
+
+    for my $struct (@structs) {
+        my @fields = $struct->{fields}->@*;
+        my $slots = join(', ', map("\"__$_->{name}\"", @fields));
+        my $init_parameters =
+            join(', ', 'self', map("$_->{name}: $_->{type}", @fields));
+
+        # Class definition.
+        say("class $struct->{name}:");
+        say("    __slots__ = [$slots]");
+
+        # Constructor definition.
+        say("    def __init__($init_parameters) -> None:");
+        # TODO: Assert invariants.
+        for my $field (@fields) {
+            say("        self.__$field->{name} = $field->{name}");
+        }
+
+        # Equality function definition.
+        say("    def __eq__(self, other: object) -> bool:");
+        say("        if not isinstance(other, $struct->{name}):");
+        say("            return False");
+        for my $field (@fields) {
+            say("        if not (self.__$field->{name} == other.__$field->{name}):");
+            say("            return False");
+        }
+        say("        return True");
+
+        # Hash function definition.
+        say("    def __hash__(self) -> bool:");
+        say("        h = 0");
+        for my $field (@fields) {
+            say("        h ^= hash(self.__$field->{name})");
+        }
+        say("        return h");
+    }
+}
+
+sub generate_rust
+{
+    my @structs = $_[0]->@*;
+    my @routines = $_[1]->@*;
+
+    say('// Generated Rust version of Tijmen.');
+
+    for my $struct (@structs) {
+        my @fields = $struct->{fields}->@*;
+        my $new_parameters =
+            join(', ', map("$_->{name}: $_->{type}", @fields));
+
+        # Struct definition.
+        say("#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]");
+        say("struct $struct->{name} {");
+        for my $field (@fields) {
+            say("    $field->{name}: $field->{type},");
+        }
+        say("}");
+
+        # Constructor definition.
+        say("impl $struct->{name} {");
+        say("    pub fn new($new_parameters) -> Self {");
+        # TODO: Assert invariants.
+        say("        Self{");
+        for my $field (@fields) {
+            say("            $field->{name}: $field->{name},");
+        }
+        say("        }");
+        say("    }");
+        say("}");
+    }
+}
+
+my @structs;
+my @routines;
+
+push(@structs, {
+    name => 'Instant',
+    fields => [
+        {name => 'ns_since_epoch', type => 'i64'},
+    ],
+});
+
+push(@structs, {
+    name => 'Duration',
+    fields => [
+        {name => 'ns', type => 'i64'},
+    ],
+});
+
+push(@structs, {
+    name => 'GregorianLocalDate',
+    fields => [
+        {name => 'era',   type => 'bool'},
+        {name => 'year',  type => 'i32'},
+        {name => 'month', type => 'i8'},
+        {name => 'day',   type => 'i8'},
+    ],
+});
+
+push(@structs, {
+    name => 'TimeOfDay',
+    fields => [
+        {name => 'hour',   type => 'i8'},
+        {name => 'minute', type => 'i8'},
+        {name => 'second', type => 'i8'},
+        {name => 'ns',     type => 'i32'},
+    ],
+});
+
+push(@structs, {
+    name => 'GregorianLocalDatetime',
+    fields => [
+        {name => 'local_date',  type => 'GregorianLocalDate'},
+        {name => 'time_of_day', type => 'TimeOfDay'},
+    ],
+});
+
+push(@structs, {
+    name => 'GregorianGlobalDate',
+    fields => [
+        {name => 'local_date', type => 'GregorianLocalDate'},
+        {name => 'time_zone',  type => 'TimeZone'},
+    ],
+});
+
+push(@structs, {
+    name => 'GregorianGlobalDatetime',
+    fields => [
+        {name => 'global_date', type => 'GregorianGlobalDate'},
+        {name => 'time_of_day', type => 'TimeOfDay'},
+    ],
+});
+
+push(@structs, {
+    name => 'TimeZone',
+    fields => [
+        # TODO: Offset from what?
+        {name => 'ns_offset', type => 'i64'},
+    ],
+});
+
+generate_python_3(\@structs, \@routines);
+generate_rust(\@structs, \@routines);
